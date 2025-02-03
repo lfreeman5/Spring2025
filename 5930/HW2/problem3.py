@@ -78,4 +78,13 @@ if __name__ == "__main__":
 
     # Print the results
     print(f"Final temperature at equilibrium: {T_solution[0][0]:.2f} K")
-    print(f"Final function value (delta_H): {T_solution[2]:.2f}")  # Fixed this line
+    print(f'b,c,d,e values at equilibrium: {solve_wgs_equilibrium(T_solution[0][0])}')
+    b,c,d,e = solve_wgs_equilibrium(T_solution[0][0])
+    N_tot = 10./6.*3.76 +b+c+d+e
+    print(N_tot)
+    print(f'Xco2:{b/N_tot}')
+    print(f'Xco:{c/N_tot}')
+    print(f'XH20:{d/N_tot}')
+    print(f'XH2:{e/N_tot}')
+    print(f'XN2:{10./6.*3.76/N_tot}')
+    
