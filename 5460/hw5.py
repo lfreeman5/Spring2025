@@ -21,6 +21,9 @@ if __name__ == "__main__":
 
     plt.plot(t,x1,label='X0 = -0.5')
     plt.plot(t,x2,label='X0 = 0.5')
+    plt.xlabel(f'Time')
+    plt.ylabel(f'X(t)')
+    plt.title(f'Solutions to dynamical system')
     plt.legend()
     plt.grid(True)
     plt.show()

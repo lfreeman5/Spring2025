@@ -1,12 +1,6 @@
 import numpy as np
 from scipy.optimize import fsolve
-
-def f(x,r):
-    return 1-x-np.exp(-r*x)
-
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve
 
 def bifurcation_search(x_range, r_range, func):
     (x_min, x_max) = x_range
@@ -55,19 +49,24 @@ def plot_bifurcation_data(data, stability_vals):
     print(data.size)
     if data.size > 0:
         plt.figure(figsize=(8, 6))
-        for i in range(len(data[:,0])):
-            marker = '.' if stability_vals[i]<0 else 'x'
-            color = 'black' if stability_vals[i]<0 else 'red'
-            plt.scatter(data[i, 0], data[i, 1], s=4, color = color, marker=marker)
+        stable_points = data[stability_vals < 0]
+        unstable_points = data[stability_vals >= 0]
+        plt.scatter(stable_points[:, 0], stable_points[:, 1], s=4, color='black', marker='.', label='Stable')
+        plt.scatter(unstable_points[:, 0], unstable_points[:, 1], s=4, color='red', marker='x', label='Unstable')
         plt.xlabel("r")
         plt.ylabel("x*")
         plt.title("Bifurcation Diagram")
+        plt.legend()
         plt.show()
     else:
         print("No bifurcation points found.")
 
-
 if __name__ == "__main__":
+    def f(x,r):
+        return 1-x-np.exp(-r*x)
+    # Arguments to bifurcation_search are (x_min, x_max), (r_min, r_max), function: xdot(x,r)
     d = bifurcation_search((-10,10),(0,4),f)
+    # Arguments to characterize_stability are function: xdot(x,r), results from bifurcation_search
     s = characterize_stability(f,d)
+    # Arguments to plot_bifurcation_data are results from bifurcation_search, results from characterize_stability
     plot_bifurcation_data(d,s)
