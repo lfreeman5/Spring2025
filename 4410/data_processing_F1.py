@@ -50,17 +50,13 @@ def plot_coeff_vs_reynolds(data, lift=True):
 sigma_V = 0.1  # Uncertainty in velocity (m/s)
 sigma_Voltage = 0.02  # Uncertainty in load cell voltage (V)
 rho = 1.0  # Air density (kg/m^3)
-S = 0.1  # Wing area (m^2)
+S = 0.06693  # Wing area (m^2)
 
-import numpy as np
-
-# Constants
-rho = 1.0  # Air density (kg/m^3)
-P = 100.0  # Power in watts (example value, adjust as needed)
+P = 74569.99  # Power in watts (example value, adjust as needed)
 
 # Example constants for the car (should be provided)
-C_D_car = 0.3  # Drag coefficient of car (example value)
-A_car = 2.0  # Cross-sectional area of car (m^2)
+C_D_car = 1  # Drag coefficient of car (example value)
+A_car = 3.0  # Cross-sectional area of car (m^2)
 
 def calculate_drag_and_velocity(C_D_wing, A_wing):
     """
@@ -286,16 +282,55 @@ grayscale_styles = ['black', 'dimgray', 'gray', 'darkgray']
 markers = ['o', 's', '^', 'd', 'v', '*']
 
 if __name__ == "__main__":
-    # Process and print result  s
+    # Constants
+    rho = 1.0  # Air density (kg/m³)
+    A_wing = 0.06693  # Wing area (m²)
+    A_car = 2.0  # Car frontal area (m²)
+    C_D_car = 0.3  # Drag coefficient of car
+    C_L_car = 0.1  # Lift coefficient of car
+    P = 74569.99  # Power in watts
+    m = 200  # Mass of vehicle (kg)
+    g = 9.80  # Gravity (m/s²)
+    r = 127.0  # Turn radius (m)
+    a = 0.198  # Cornering force constant
+    b = 1  # Cornering force offset
+
+
     for H, dataset in data.items():
         V, L_volt, D_volt = dataset.T
         F_L, F_D = voltage_to_force(L_volt, D_volt)
         C_L, C_D = compute_coefficients(V, F_L, F_D)
 
+        # Use highest velocity at each height
+        idx_max_V = np.argmax(V)
+        V_max = V[idx_max_V]
+        C_L_max = C_L[idx_max_V]
+        C_D_max = C_D[idx_max_V]
+        sigma_C_L_wing, sigma_C_D_wing = compute_uncertainty(V_max,L_volt[idx_max_V],D_volt[idx_max_V])
+        print(f'Uncertainty in CL, CD: {sigma_C_L_wing} {sigma_C_D_wing}')
+
+
+
+        # Compute drag force and straight-line velocity
+        F_D_total, V_s = calculate_drag_and_velocity(C_D_max, A_wing)
+        
+        # Compute cornering force and cornering velocity
+        F_corner, V_c = calculate_cornering(a, m, g, b, C_L_car, C_L_max, A_car, A_wing, r, rho)
+
+        # Compute uncertainties
+        sigma_F_D_total, sigma_V_s = calculate_uncertainty_drag_velocity(C_D_max, A_wing, sigma_C_D_wing)
+        sigma_F_corner, sigma_V_c = calculate_uncertainty_cornering(a, m, g, b, C_L_car, C_L_max, A_car, A_wing, r, rho, sigma_C_L_wing)
+
+        # Print results
         print(f"Height: {H:.1f} mm")
-        for v, cl, cd in zip(V, C_L, C_D):
-            print(f"  V: {v:.2f} m/s, C_L: {cl:.4f}, C_D: {cd:.4f}")
+        print(f"  Max Velocity: {V_max:.2f} m/s")
+        print(f"  C_L: {C_L_max:.4f}, C_D: {C_D_max:.4f}")
+        print(f"  Total Drag Force: {F_D_total:.4f} N ± {sigma_F_D_total:.4f} N")
+        print(f"  Straight-Line Velocity: {V_s:.4f} m/s ± {sigma_V_s:.4f} m/s")
+        print(f"  Cornering Force: {F_corner:.4f} N ± {sigma_F_corner:.4f} N")
+        print(f"  Cornering Velocity: {V_c:.4f} m/s ± {sigma_V_c:.4f} m/s")
         print()
 
+    # Generate plots
     plot_coeff_vs_reynolds(data)
-    plot_coeff_vs_reynolds(data,lift=False)
+    plot_coeff_vs_reynolds(data, lift=False)
