@@ -2,14 +2,14 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-
+# --- Previously defined functions ---
 def voltage_to_force(lift_voltage, drag_voltage):
     """Convert load cell voltages to forces in Newtons."""
     F_L = 53.411 * lift_voltage - 0.2353
     F_D = 75.424 * drag_voltage + 0.0971
     return F_L, F_D
 
-def compute_coefficients(V, F_L, F_D, rho=1.0, S=0.1):
+def compute_coefficients(V, F_L, F_D, S, rho=1.0):
     """Compute lift and drag coefficients."""
     q = 0.5 * rho * V**2  # Dynamic pressure
     C_L = F_L / (q * S)
@@ -19,19 +19,16 @@ def compute_coefficients(V, F_L, F_D, rho=1.0, S=0.1):
 def reynolds_number(V, L=0.1, nu=1.49e-5):
     return (V * L) / nu
 
-def plot_coeff_vs_reynolds(data, lift=True):
+def plot_coeff_vs_reynolds(data, S, lift=True):
     """Plot Lift Coefficient (C_L) or Drag Coefficient (C_D) as a function of Reynolds Number (Re)."""
     plt.figure()
-
     for i, (H, dataset) in enumerate(data.items()):
         V, L_volt, D_volt = dataset.T
         F_L, F_D = voltage_to_force(L_volt, D_volt)
-        C_L, C_D = compute_coefficients(V, F_L, F_D)
+        C_L, C_D = compute_coefficients(V, F_L, F_D,S)
         Re = reynolds_number(V)
-
         color = grayscale_styles[i % len(grayscale_styles)]
         marker = markers[i % len(markers)]
-
         if lift:
             plt.plot(Re, C_L, color, marker=marker, label=f"H = {H:.1f} mm", markersize=5)
             plt.ylabel("Lift Coefficient, C_L")
@@ -40,164 +37,104 @@ def plot_coeff_vs_reynolds(data, lift=True):
             plt.plot(Re, C_D, color, marker=marker, label=f"H = {H:.1f} mm", markersize=5)
             plt.ylabel("Drag Coefficient, C_D")
             plt.title("Drag Coefficient vs. Reynolds Number")
-
     plt.xlabel("Reynolds Number, Re")
     plt.legend()
-    plt.xscale("log")  # Reynolds number is often plotted on a log scale
+    plt.xscale("log")
     plt.tight_layout()
     plt.show()
-
-sigma_V = 0.1  # Uncertainty in velocity (m/s)
-sigma_Voltage = 0.02  # Uncertainty in load cell voltage (V)
-rho = 1.0  # Air density (kg/m^3)
-S = 0.06693  # Wing area (m^2)
-
-P = 74569.99  # Power in watts (example value, adjust as needed)
-
-# Example constants for the car (should be provided)
-C_D_car = 1  # Drag coefficient of car (example value)
-A_car = 3.0  # Cross-sectional area of car (m^2)
 
 def calculate_drag_and_velocity(C_D_wing, A_wing):
     """
     Calculate total drag force (F_D) and maximum straight-line velocity (V_s).
-    
-    Parameters:
-    C_D_wing (float): Drag coefficient of the wing
-    A_wing (float): Area of the wing (m^2)
-    
-    Returns:
-    F_D (float): Total drag force in newtons (N)
-    V_s (float): Maximum straight-line velocity in m/s
     """
-    # Calculate total drag coefficient
     total_C_D = C_D_car * A_car + C_D_wing * A_wing
-    
-    # Calculate drag force
-    # Assume the vehicle is moving at V_s, so calculate drag force at V_s
-    F_D = 0.5 * rho * P / (total_C_D)  # Using the equation for total drag force
-    
-    # Calculate maximum straight-line velocity
-    V_s = np.cbrt(2 * P / (rho * total_C_D))  # Using the equation for V_s
-    
+    # F_D = 0.5 * rho * P / (total_C_D)
+    F_D = 0.5 * rho * P / total_C_D  # as given in the original formulation
+    V_s = np.cbrt(2 * P / (rho * total_C_D))
     return F_D, V_s
 
 def calculate_uncertainty_drag_velocity(C_D_wing, A_wing, sigma_CD_wing):
     """
     Calculate uncertainty in total drag force (F_D) and maximum straight-line velocity (V_s).
-    
-    Parameters:
-    C_D_wing (float): Drag coefficient of the wing
-    A_wing (float): Area of the wing (m^2)
-    sigma_CD_wing (float): Uncertainty in the drag coefficient of the wing
-    
-    Returns:
-    sigma_F_D (float): Uncertainty in total drag force (N)
-    sigma_V_s (float): Uncertainty in maximum velocity (m/s)
     """
-    # Calculate total drag coefficient (drag coefficients of car + wing)
     total_C_D = C_D_car * A_car + C_D_wing * A_wing
-    
-    # Calculate maximum straight-line velocity
-    V_s = np.cbrt(2 * P / (rho * total_C_D))
-    
-    # Uncertainty in drag force (F_D)
-    sigma_F_D = 0.5 * rho * V_s**2 * A_wing * sigma_CD_wing
-    
-    # Uncertainty in velocity (V_s)
-    sigma_V_s = (2 * P / (3 * rho * total_C_D**(4/3))) * sigma_CD_wing
-    
+    # Using: sigma_{F_D} = (0.5*rho*P*A_wing/(total_C_D^2))*sigma_CD_wing
+    sigma_F_D = 0.5 * rho * P * A_wing / (total_C_D**2) * sigma_CD_wing
+    # Using: sigma_{V_s} = (A_wing/3)*(2P/rho)**(1/3)*(total_C_D)**(-4/3)*sigma_CD_wing
+    sigma_V_s = (A_wing / 3) * (2 * P / rho)**(1/3) * (total_C_D)**(-4/3) * sigma_CD_wing
     return sigma_F_D, sigma_V_s
 
 def calculate_cornering(a, m, g, b, C_L_car, C_L_wing, A_car, A_wing, r, rho):
     """
-    Calculate the cornering force and cornering velocity.
+    Calculate the cornering force and cornering velocity using the updated equation:
     
-    Parameters:
-    a (float): Constant 'a'
-    m (float): Mass of the car (kg)
-    g (float): Gravitational acceleration (m/s^2)
-    b (float): Constant 'b'
-    C_L_car (float): Lift coefficient of the car
-    C_L_wing (float): Lift coefficient of the wing
-    A_car (float): Area of the car (m^2)
-    A_wing (float): Area of the wing (m^2)
-    r (float): Radius of the curve (m)
-    rho (float): Air density (kg/m^3)
+      (m V_c^2)/r = a*(0.5*rho*V_c^2*(C_L_car*A_car + C_L_wing*A_wing) + m*g) + b
     
-    Returns:
-    F_corner (float): Cornering force (N)
-    V_c (float): Cornering velocity (m/s)
+    Solving for V_c gives:
+    
+      V_c = sqrt((a*m*g + b) / ((m/r) - (a*rho*(C_L_car*A_car + C_L_wing*A_wing))/2))
+    
+    The cornering force is defined as:
+    
+      F_corner = m*V_c^2 / r.
     """
-    
-    # Cornering velocity calculation
-    denominator = (m / r) + (a / 2) * rho * (C_L_car * A_car + C_L_wing * A_wing)
+    C_sum = C_L_car * A_car + C_L_wing * A_wing
+    denominator = (m / r) - (a * rho * C_sum) / 2
     numerator = a * m * g + b
     V_c = np.sqrt(numerator / denominator)
-    
-    # Cornering force calculation
-    F_corner = a * (-0.5 * rho * V_c**2 * (C_L_car * A_car + C_L_wing * A_wing) + m * g) + b
-    
+    F_corner = m * V_c**2 / r
     return F_corner, V_c
 
 def calculate_uncertainty_cornering(a, m, g, b, C_L_car, C_L_wing, A_car, A_wing, r, rho, sigma_C_L_wing):
     """
-    Calculate the uncertainty in cornering force and cornering velocity, considering only the uncertainty in C_L_wing.
+    Calculate the uncertainty in cornering force and cornering velocity using the updated equations,
+    considering only the uncertainty in C_L_wing.
     
-    Parameters:
-    sigma_C_L_wing (float): Uncertainty in C_L_wing.
-    (other parameters as before)
-
-    Returns:
-    sigma_F_corner (float): Uncertainty in cornering force (N)
-    sigma_V_c (float): Uncertainty in cornering velocity (m/s)
+    The cornering velocity is given by:
+    
+      V_c = sqrt((a*m*g + b) / ((m/r) - (a*rho*(C_L_car*A_car + C_L_wing*A_wing))/2))
+    
+    and its derivative with respect to C_L_wing is:
+    
+      dV_c/d(C_L_wing) = (a*rho*A_wing/(4)) * sqrt(a*m*g+b) / ((m/r - (a*rho*(C_L_car*A_car+C_L_wing*A_wing))/2)^(3/2)).
+    
+    Then, the uncertainty is:
+    
+      sigma_V_c = |dV_c/d(C_L_wing)| * sigma_C_L_wing,
+    
+    and for the cornering force:
+    
+      sigma_F_corner = (2*m*V_c/r)*sigma_V_c.
     """
-    
-    # Calculate cornering velocity V_c (as before)
-    denominator = (m / r) + (a / 2) * rho * (C_L_car * A_car + C_L_wing * A_wing)
+    C_sum = C_L_car * A_car + C_L_wing * A_wing
+    denominator = (m / r) - (a * rho * C_sum) / 2
     numerator = a * m * g + b
     V_c = np.sqrt(numerator / denominator)
-    
-    # Calculate the partial derivative of cornering velocity with respect to C_L_wing
-    partial_V_c_C_L_wing = - (a * (m * g + b)) / (2 * r * (denominator**2)) * (A_wing * rho)  # derivative with respect to C_L_wing
-    
-    # Uncertainty in cornering velocity
-    sigma_V_c = abs(partial_V_c_C_L_wing) * sigma_C_L_wing
-    
-    # Now calculate the partial derivative of cornering force with respect to C_L_wing
-    partial_F_corner_C_L_wing = -0.5 * rho * V_c**2 * A_wing * a  # derivative with respect to C_L_wing
-    
-    # Uncertainty in cornering force
-    sigma_F_corner = abs(partial_F_corner_C_L_wing) * sigma_C_L_wing
-    
+    # Compute derivative dV_c/d(C_L_wing)
+    dV_c_dCLwing = (a * rho * A_wing / 4) * np.sqrt(numerator) / (denominator**(3/2))
+    sigma_V_c = abs(dV_c_dCLwing) * sigma_C_L_wing
+    sigma_F_corner = (2 * m * V_c / r) * sigma_V_c
     return sigma_F_corner, sigma_V_c
 
-
-def compute_uncertainty(V, L_volt, D_volt):
+def compute_uncertainty(V, L_volt, D_volt, S, sigma_Voltage, sigma_V):
     """Calculate the uncertainty in C_L and C_D."""
-    
-    # Compute forces from voltages
     F_L = 53.411 * L_volt - 0.2353
     F_D = 75.424 * D_volt + 0.0971
-    
-    # Compute C_L and C_D
     C_L = (2 * F_L) / (rho * S * V**2)
     C_D = (2 * F_D) / (rho * S * V**2)
-    
-    # Compute partial derivatives for uncertainty propagation
     dCL_dV = -2 * F_L / (rho * S * V**3)
     dCL_dLvolt = (2 * 53.411) / (rho * S * V**2)
-
     dCD_dV = -2 * F_D / (rho * S * V**3)
     dCD_dDvolt = (2 * 75.424) / (rho * S * V**2)
-
-    # Apply uncertainty propagation formula
     sigma_CL = np.sqrt((dCL_dV * sigma_V)**2 + (dCL_dLvolt * sigma_Voltage)**2)
     sigma_CD = np.sqrt((dCD_dV * sigma_V)**2 + (dCD_dDvolt * sigma_Voltage)**2)
-
     return sigma_CL, sigma_CD
 
-# Experimental data grouped by height (H, V, L, D)
+def calc_laptime(v_s, v_c, ss, sc):
+    sigma = np.sqrt((800/v_s/v_s * ss)**2 + (800/v_c/v_c * sc)**2)
+    return 800 * (1 / v_s + 1 / v_c), sigma
+
+# --- Experimental data ---
 data = {
     1.2: np.array([
         [4.533531077, 0.002757164, 0.00686729],
@@ -249,67 +186,67 @@ data = {
     ])
 }
 
+# --- Matplotlib settings ---
 mpl.rcParams.update({
-    'font.family': 'Times New Roman',  # AIAA recommends Times New Roman font
-    'font.size': 10,                   # Standard font size for AIAA documents
-    'axes.labelsize': 10,              # Font size for axis labels
-    'axes.titlesize': 12,              # Font size for plot titles
-    'legend.fontsize': 8,              # Font size for legends
-    'xtick.labelsize': 8,              # Font size for x-axis tick labels
-    'ytick.labelsize': 8,              # Font size for y-axis tick labels
-    'lines.linewidth': 1,              # Line width for plot lines
-    'lines.markersize': 4,             # Marker size for plot markers
-    'grid.linestyle': '--',            # Dashed grid lines
-    'grid.linewidth': 0.5,             # Grid line width
-    'axes.grid': True,                 # Enable grid by default
-    'axes.grid.which': 'both',         # Apply grid to both major and minor ticks
-    'axes.linewidth': 0.75,            # Axis line width
-    'xtick.major.size': 5,             # Major tick size for x-axis
-    'ytick.major.size': 5,             # Major tick size for y-axis
-    'xtick.minor.size': 2.5,           # Minor tick size for x-axis
-    'ytick.minor.size': 2.5,           # Minor tick size for y-axis
-    'xtick.direction': 'in',           # Inward ticks for x-axis
-    'ytick.direction': 'in',           # Inward ticks for y-axis
-    'legend.loc': 'best',              # Optimal legend placement
-    'legend.frameon': False,           # No frame around legend
-    'savefig.dpi': 300,                # High resolution for saved figures
-    'savefig.format': 'pdf',           # Save figures in PDF format
-    'figure.figsize': (6.5, 4.5),      # Figure size in inches (width, height)
-    'figure.dpi': 100                  # Display resolution
+    'font.family': 'Times New Roman',
+    'font.size': 10,
+    'axes.labelsize': 10,
+    'axes.titlesize': 12,
+    'legend.fontsize': 8,
+    'xtick.labelsize': 8,
+    'ytick.labelsize': 8,
+    'lines.linewidth': 1,
+    'lines.markersize': 4,
+    'grid.linestyle': '--',
+    'grid.linewidth': 0.5,
+    'axes.grid': True,
+    'axes.grid.which': 'both',
+    'axes.linewidth': 0.75,
+    'xtick.major.size': 5,
+    'ytick.major.size': 5,
+    'xtick.minor.size': 2.5,
+    'ytick.minor.size': 2.5,
+    'xtick.direction': 'in',
+    'ytick.direction': 'in',
+    'legend.loc': 'best',
+    'legend.frameon': False,
+    'savefig.dpi': 300,
+    'savefig.format': 'pdf',
+    'figure.figsize': (6.5, 4.5),
+    'figure.dpi': 100
 })
-
 grayscale_styles = ['black', 'dimgray', 'gray', 'darkgray']
 markers = ['o', 's', '^', 'd', 'v', '*']
 
 if __name__ == "__main__":
     # Constants
     rho = 1.0  # Air density (kg/m³)
-    A_wing = 0.06693  # Wing area (m²)
-    A_car = 2.0  # Car frontal area (m²)
-    C_D_car = 0.3  # Drag coefficient of car
-    C_L_car = 0.1  # Lift coefficient of car
+    A_wing_tunnel = 0.06693  # Wing area from tunnel test (m²)
+    A_wing = 9 * A_wing_tunnel  # Scaled wing area (m²)
+    A_car = 3.0  # Car frontal area (m²)
+    C_D_car = 1.0  # Drag coefficient of car
+    C_L_car = 0.5  # Lift coefficient of car
     P = 74569.99  # Power in watts
     m = 200  # Mass of vehicle (kg)
     g = 9.80  # Gravity (m/s²)
     r = 127.0  # Turn radius (m)
     a = 0.198  # Cornering force constant
-    b = 1  # Cornering force offset
-
+    b = 1      # Cornering force offset
+    sigma_V = 0.1  # Velocity uncertainty (m/s)
+    sigma_Voltage = 0.02  # Voltage uncertainty (V)
 
     for H, dataset in data.items():
         V, L_volt, D_volt = dataset.T
         F_L, F_D = voltage_to_force(L_volt, D_volt)
-        C_L, C_D = compute_coefficients(V, F_L, F_D)
+        C_L, C_D = compute_coefficients(V, F_L, F_D,A_wing_tunnel)
 
         # Use highest velocity at each height
         idx_max_V = np.argmax(V)
         V_max = V[idx_max_V]
         C_L_max = C_L[idx_max_V]
         C_D_max = C_D[idx_max_V]
-        sigma_C_L_wing, sigma_C_D_wing = compute_uncertainty(V_max,L_volt[idx_max_V],D_volt[idx_max_V])
-        print(f'Uncertainty in CL, CD: {sigma_C_L_wing} {sigma_C_D_wing}')
-
-
+        sigma_C_L_wing, sigma_C_D_wing = compute_uncertainty(V_max, L_volt[idx_max_V], D_volt[idx_max_V], A_wing_tunnel, sigma_Voltage, sigma_V)
+        print(f'Uncertainty in C_L, C_D: {sigma_C_L_wing} {sigma_C_D_wing}')
 
         # Compute drag force and straight-line velocity
         F_D_total, V_s = calculate_drag_and_velocity(C_D_max, A_wing)
@@ -325,12 +262,90 @@ if __name__ == "__main__":
         print(f"Height: {H:.1f} mm")
         print(f"  Max Velocity: {V_max:.2f} m/s")
         print(f"  C_L: {C_L_max:.4f}, C_D: {C_D_max:.4f}")
-        print(f"  Total Drag Force: {F_D_total:.4f} N ± {sigma_F_D_total:.4f} N")
-        print(f"  Straight-Line Velocity: {V_s:.4f} m/s ± {sigma_V_s:.4f} m/s")
-        print(f"  Cornering Force: {F_corner:.4f} N ± {sigma_F_corner:.4f} N")
-        print(f"  Cornering Velocity: {V_c:.4f} m/s ± {sigma_V_c:.4f} m/s")
+        print(f"  Total Drag Force: {F_D_total:.4f} ± {sigma_F_D_total:.4f}")
+        print(f"  Straight-Line Velocity: {V_s:.4f} ± {sigma_V_s:.4f}")
+        print(f"  Cornering Force: {F_corner:.4f} ± {sigma_F_corner:.4f}")
+        print(f"  Cornering Velocity: {V_c:.4f} ± {sigma_V_c:.4f}")
+        l, sl = calc_laptime(V_s, V_c, sigma_V_s, sigma_V_c)
+        print(f"  Lap Time: {l:.4f} ± {sl:.4f}")
         print()
 
-    # Generate plots
-    plot_coeff_vs_reynolds(data)
-    plot_coeff_vs_reynolds(data, lift=False)
+    # Lap Time without wing:
+    _, V_s_no_wing = calculate_drag_and_velocity(0,0)
+    _, V_c_no_wing = calculate_cornering(a, m, g, b, 0, C_L_max, A_car, 0, r, rho)
+    t_no_wing = calc_laptime(V_s_no_wing,V_c_no_wing,0,0)
+    print(f'Straight line & cornering vel w/o wing: {V_s_no_wing}     {V_c_no_wing}')
+    print(f'Lap time with no wing: {t_no_wing}')
+
+    # # Generate plots
+    plot_coeff_vs_reynolds(data, A_wing_tunnel)
+    plot_coeff_vs_reynolds(data, A_wing_tunnel, lift=False)
+
+    heights = [1.2, 19.6, 40.4, 60.0, 80.2, 100.2]  # Heights in mm
+    speeds = [5, 10, 15, 20, 25, 30]  # Set speeds in m/s
+
+    def print_table(force_matrix, force_name):
+        print(f"{force_name} (N)")
+        print("Speed (m/s)\t" + "\t".join([f"H={h} mm" for h in heights]))
+        for i, V in enumerate(speeds):
+            row = [f"{V}"] + [f"{force_matrix[i, j]:.2f}" for j in range(len(heights))]
+            print("\t".join(row))
+        print("\n")
+
+    # Compute forces
+    L_matrix = np.zeros((len(speeds), len(heights)))
+    D_matrix = np.zeros((len(speeds), len(heights)))
+
+    for j, H in enumerate(heights):
+        L, D = voltage_to_force(*data[H][:, 1:].T)  # Convert voltages to forces
+        for i, V in enumerate(speeds):
+            idx = np.argmin(np.abs(data[H][:, 0] - V))  # Find closest velocity
+            L_matrix[i, j] = L[idx]
+            D_matrix[i, j] = D[idx]
+
+    # Print tables
+    print_table(L_matrix, "Lift Force")
+    print_table(D_matrix, "Drag Force")
+
+    # Given parameters
+    heights = np.array([1.2, 19.6, 40.4, 60.0, 80.2, 100.2])  # Heights in mm
+    c = 10  # Reference chord length in mm
+    H_non_dim = heights / c  # Non-dimensionalized height
+    speeds = np.array([5, 10, 15, 20, 25, 30])  # Set speeds in m/s
+
+    # Example force data (replace with actual data)
+    S_ref = 0.067  # Reference area (m^2)
+
+    C_L_matrix = np.zeros((6, 6))  # Placeholder for computed lift coefficients
+    for j, height in enumerate(heights):  # Loop over heights
+        for i in range(6):  # Loop over velocities
+            V, F_L, F_D = data[height][i]
+            _, C_L_matrix[i, j] = compute_coefficients(V, F_L, F_D, S_ref)
+
+    # Grayscale styles and markers
+    grayscale_styles = ['black', 'dimgray', 'gray', 'darkgray', 'silver', 'lightgray']
+    markers = ['o', 's', '^', 'd', 'v', '*']
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    for i, V in enumerate(speeds):
+        plt.plot(H_non_dim, C_L_matrix[i, :], 
+                marker=markers[i], color=grayscale_styles[i], 
+                label=f"V = {V} m/s", linestyle='-')
+
+    plt.xlabel("Non-dimensional Height (H/c)")
+    plt.ylabel("Drag Coefficient $C_D$")
+    plt.title("Drag Coefficient vs. Non-dimensional Height")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    wing_heights = np.array([1.2, 19.6, 40.4, 60.0, 80.2, 100.2])
+    lap_times = np.array([70.7689, 70.0991, 70.2688, 70.3583, 70.4596, 70.4485])
+    errors = np.array([0.0813, 0.0829, 0.0828, 0.0831, 0.0832, 0.0833])
+
+    plt.figure(figsize=(8,6))
+    plt.errorbar(wing_heights, lap_times, yerr=errors, fmt='-o', color='black', ecolor='black', capsize=5)
+    plt.xlabel("Wing height (mm)")
+    plt.ylabel("Lap Time (s)")
+    plt.show()
